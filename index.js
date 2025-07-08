@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser')
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
  require('dotenv').config();
  const validator= require('validator');
  const jwt = require('jsonwebtoken');
@@ -44,6 +44,58 @@ async function run() {
     expiresIn: '7d'
   });
 };
+
+// Middleware should be defined separately (not inside route handler)
+const isAuth = async (req, res, next) => {
+  try {
+    const { token } = req.cookies;
+    if (!token) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    const verifyToken = jwt.verify(token, process.env.JWT_SECRET);
+    if (!verifyToken) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    
+    req.userId = verifyToken.userId;
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    return res.status(500).json({ message: "Authentication failed" });
+  }
+};
+
+// Route handler
+app.get('/getCurrentUser', isAuth, async (req, res) => {
+  try {
+    // Correct MongoDB query - findById and proper projection
+    const user = await userCollection.findOne({ _id: new ObjectId(req.userId) });
+// Then manually remove password
+     delete user.password
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        // Add other non-sensitive fields as needed
+      }
+    });
+    
+  } catch (error) {
+    console.error("Get current user error:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to fetch user data" 
+    });
+  }
+});
 
 
 app.post('/registration', async (req, res) => {
