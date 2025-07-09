@@ -140,11 +140,11 @@ app.post('/registration', async (req, res) => {
     
     // Set cookie
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+        httpOnly: true,
+        secure: false,
+        sameSite:'Strict',
+        maxAge:7 * 24 * 60 * 60 * 1000
+      });
     
     // Return response (don't send back password hash)
     const userResponse = {
@@ -193,11 +193,11 @@ app.post('/login', async (req, res) => {
 
     // Set secure cookie
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+        httpOnly: true,
+        secure: false,
+        sameSite:'Strict',
+        maxAge:7 * 24 * 60 * 60 * 1000
+      });
 
     // Return minimal user info (without sensitive data)
     const userResponse = {
@@ -220,12 +220,7 @@ app.post('/login', async (req, res) => {
 // clear cookie
 app.get('/logout', async(req,res)=>{
  try{
-  res.clearCookie('token', {
-   httpOnly: true,
-   secure: process.env.NODE_ENV === 'production',
-   sameSite: process.env.NODE_ENV === 'production'?'none':'strict',
-   maxAge:0,
- })
+  res.clearCookie('token')
  return res.status(200).json({ 
       message: "Logout successfully",
     });
