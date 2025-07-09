@@ -141,9 +141,8 @@ app.post('/registration', async (req, res) => {
     // Set cookie
     res.cookie('token', token, {
         httpOnly: true,
-        secure: false,
-        sameSite:'Strict',
-        maxAge:7 * 24 * 60 * 60 * 1000
+        secure: process.env.NODE_ENV === 'production',
+        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
       });
     
     // Return response (don't send back password hash)
@@ -194,9 +193,8 @@ app.post('/login', async (req, res) => {
     // Set secure cookie
     res.cookie('token', token, {
         httpOnly: true,
-        secure: false,
-        sameSite:'Strict',
-        maxAge:7 * 24 * 60 * 60 * 1000
+        secure: process.env.NODE_ENV === 'production',
+        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
       });
 
     // Return minimal user info (without sensitive data)
@@ -220,7 +218,12 @@ app.post('/login', async (req, res) => {
 // clear cookie
 app.get('/logout', async(req,res)=>{
  try{
-  res.clearCookie('token')
+  res.clearCookie('token', {
+   httpOnly: true,
+   secure: process.env.NODE_ENV === 'production',
+   sameSite: process.env.NODE_ENV === 'production'?'none':'strict',
+   maxAge:0,
+ })
  return res.status(200).json({ 
       message: "Logout successfully",
     });
