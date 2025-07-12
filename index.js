@@ -43,6 +43,15 @@ async function run() {
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: '7d'
   });
+  
+};
+
+// jwt token for admin
+       const generateToken1 = (email) => {
+  return jwt.sign({ email }, process.env.JWT_SECRET, {
+    expiresIn: '7d'
+  });
+  
 };
 
 // Middleware should be defined separately (not inside route handler)
@@ -63,6 +72,27 @@ const isAuth = async (req, res, next) => {
   } catch (error) {
     console.error("Authentication error:", error);
     return res.status(500).json({ message: "Authentication failed" });
+  }
+};
+
+// middleware for admin
+const isAuthAdmin = async (req, res, next) => {
+  try {
+    const { token } = req.cookies;
+    if (!token) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    const verifyToken = jwt.verify(token, process.env.JWT_SECRET);
+    if (!verifyToken) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    
+    req.adminEmail = process.env.ADMIN_EMAIL;
+    next();
+  } catch (error) {
+    console.error("Admin Authentication error:", error);
+    return res.status(500).json({ message: "Admin Authentication failed" });
   }
 };
 
@@ -93,6 +123,30 @@ app.get('/getCurrentUser', isAuth, async (req, res) => {
     return res.status(500).json({ 
       success: false,
       message: "Failed to fetch user data" 
+    });
+  }
+});
+
+// Admin route handle
+app.get('/getAdmin', isAuthAdmin, async (req, res) => {
+  try {
+    // Correct MongoDB query - findById and proper projection
+    const adminEmail = req.adminEmail
+    
+    if (!adminEmail) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+    
+    return res.status(200).json({
+      email:adminEmail,
+      role:"admin"
+    });
+    
+  } catch (error) {
+    console.error("Get admin error:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to fetch admin data" 
     });
   }
 });
@@ -208,6 +262,45 @@ app.post('/login', async (req, res) => {
       message: "Login successful",
       user: userResponse
     });
+
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// admin login
+app.post('/adminSignin', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Input validation
+    if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
+      // Generate token
+    const token = generateToken1(email);
+
+    // Set secure cookie
+    res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
+      });
+
+    // Return minimal user info (without sensitive data)
+    // const userResponse = {
+    //   _id: user._id,
+    //   name: user.name,
+    //   email: user.email
+    // };
+
+    return res.status(200).json({ 
+      message: "Login successful",
+      token: token
+    });
+      
+    }
+
+    return res.status(400).json({message:"Invalid Credentials"})
 
   } catch (error) {
     console.error("Login error:", error);
