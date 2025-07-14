@@ -415,6 +415,21 @@ app.post('/products', upload.array('images', 4), async (req, res) => {
         });
       }
     });
+
+// product view
+app.get('/products', async(req,res)=>{
+  const result = await productCollection.find().toArray()
+  res.send(result)
+})
+
+// product delete
+ app.delete('/products/:id',isAuthAdmin, async(req,res)=>{
+  const id = req.params.id
+  const query = {_id : new ObjectId(id)}
+  const result =await productCollection.deleteOne(query)
+  res.send(result)
+})
+
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
