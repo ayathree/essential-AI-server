@@ -1,12 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser')
-const { MongoClient, ServerApiVersion, ObjectId, BSONType } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
  require('dotenv').config();
  const validator= require('validator');
  const cloudinary = require('cloudinary').v2;
  const multer = require('multer');
-const upload = multer({ dest: 'uploads/' }); 
  const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
  const port = process.env.PORT || 5000;
@@ -21,7 +20,6 @@ const bcrypt = require('bcryptjs');
 
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 
 // Configure Cloudinary
@@ -42,6 +40,12 @@ const client = new MongoClient(uri, {
     strict: true,
     deprecationErrors: true,
   }
+});
+
+// Multer config - using memory storage for Cloudinary
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
 });
 
 async function run() {
@@ -340,82 +344,77 @@ app.get('/logout', async(req,res)=>{
  }
 })
 
+
+
 // product add
-app.post('/products', upload.array('images',4), async (req, res) => {
-  try {
-    const { name, price, description, category,subCategory,sizes,bestseller } = req.body;
-    const imageFiles = req.file; // This comes from multer
+app.post('/products', upload.array('images', 4), async (req, res) => {
+      try {
+        const { name, price, description, category, subCategory, sizes, bestseller } = req.body;
+        const files = req.files; // Array of files
 
-    if (!imageFiles || imageFiles.length === 0) {
-      return res.status(400).json({ error: 'At least one image is required' });
-    }
+        if (!files || files.length === 0) {
+          return res.status(400).json({ error: 'At least one image is required' });
+        }
 
-    // 1. Upload image to Cloudinary
-     const imageUploads = imageFiles.map(file => 
-      cloudinary.uploader.upload(file.path, {
-        folder: 'essential-products',
-        use_filename: true,
-        unique_filename: false,
-        overwrite: true
-      })
-    );
+        // Upload images to Cloudinary
+        const uploadPromises = files.map(file => {
+          return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              {
+                folder: 'essential-products',
+                resource_type: 'auto'
+              },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            
+            uploadStream.end(file.buffer);
+          });
+        });
 
-    const cloudinaryResults = await Promise.all(imageUploads);
+        const cloudinaryResults = await Promise.all(uploadPromises);
 
-    //  const sizesArray = Array.isArray(sizes) ? sizes 
-    //                  : typeof sizes === 'string' ? sizes.split(',') 
-    //                  : [];
-    
-    // const isBestseller = typeof bestseller === 'string' 
-    //                    ? bestseller.toLowerCase() === 'true'
-    //                    : Boolean(bestseller);
+        // Create product document
+        const productData = {
+          name,
+          price: parseFloat(price),
+          description,
+          category,
+          subCategory,
+          sizes: JSON.parse(sizes),
+          bestseller: bestseller === "true",
+          images: cloudinaryResults.map(result => ({
+            public_id: result.public_id,
+            url: result.secure_url,
+            width: result.width,
+            height: result.height
+          })),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
 
-    // 2. Create product document for MongoDB
-    const productData = {
-      name,
-      price: parseFloat(price),
-      description,
-      category,
-      subCategory,
-       sizes: JSON.parse(sizes),
-      //  sizesArray.filter(size => size.trim() !== ''), // Clean empty values
-      bestseller: bestseller === "true" ? true : false,
-      images: cloudinaryResults.map(result => ({
-        public_id: result.public_id,
-        url: result.secure_url,
-        width: result.width,
-        height: result.height
-      })),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+        // Insert into MongoDB
+        const result = await productCollection.insertOne(productData);
 
-    // 3. Insert into MongoDB
-    const result = await productCollection.insertOne(productData);
+        res.status(201).json({
+          success: true,
+          product: {
+            id: result.insertedId,
+            ...productData
+          }
+        });
 
-    // 4. Clean up - delete temporary file
-    imageFiles.forEach(file => {
-      const fs = require('fs');
-      fs.unlinkSync(file.path);
-    });
-
-    res.status(201).json({
-      success: true,
-      product: {
-        id: result.insertedId,
-        ...productData
+      } catch (error) {
+        console.error('Error adding product:', error);
+        res.status(500).json({ 
+          success: false,
+          error: 'Failed to add product',
+          message: error.message
+        });
       }
     });
-
-    client.close();
-  } catch (error) {
-    console.error('Error adding product:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to add product' 
-    });
-  }
-});
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
