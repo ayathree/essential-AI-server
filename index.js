@@ -430,6 +430,113 @@ app.get('/products', async(req,res)=>{
   res.send(result)
 })
 
+// add to cart
+app.post('/addToCart', isAuth, async (req, res) => {
+  try {
+    const { itemId, size } = req.body; // No need for userId in body
+    const userId = req.userId; // From isAuth middleware
+
+    // 1. Find the user
+    const userData = await userCollection.findOne({ _id: new ObjectId(userId) });
+    if (!userData) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 2. Initialize or update cartData
+    const cartData = userData.cartData || {};
+    
+    if (cartData[itemId]) {
+      cartData[itemId][size] = (cartData[itemId][size] || 0) + 1;
+    } else {
+      cartData[itemId] = { [size]: 1 };
+    }
+
+    // 3. Update the user document
+    await userCollection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { cartData } }
+    );
+
+    return res.status(201).json({ message: "Added To Cart" });
+  } catch (error) {
+    console.error("AddToCart Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// update cart
+app.put('/updateCart', isAuth, async (req, res) => {
+  try {
+    const userId = req.userId; 
+    const { itemId, size, quantity } = req.body;
+
+    // 1. Validate input
+    if (!itemId || !size || quantity === undefined || quantity < 0) {
+      return res.status(400).json({ message: "Invalid input: itemId, size, and positive quantity required" });
+    }
+
+    // 2. Check if user exists
+    const userData = await userCollection.findOne({ _id: new ObjectId(userId) });
+    if (!userData) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3. Initialize or validate cartData
+    const cartData = userData.cartData || {};
+    if (!cartData[itemId]) {
+      return res.status(400).json({ message: "Item not found in cart" });
+    }
+
+    // 4. Update quantity (full replacement)
+    cartData[itemId][size] = quantity;
+
+    // 5. Save to database
+    await userCollection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { cartData } }
+    );
+
+    return res.status(200).json({ 
+      message: "Cart updated successfully",
+      cartData // Optional: Return updated cart
+    });
+
+  } catch (error) {
+    console.error("Update Cart Error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// get current user
+app.post('/cart', isAuth, async (req, res) => {
+  try {
+    const userId = req.userId; 
+
+    // 1. Find user with proper ObjectId conversion
+    const userData = await userCollection.findOne({ 
+      _id: new ObjectId(userId) 
+    });
+
+    // 2. Handle user not found
+    if (!userData) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3. Return cart data (empty object if doesn't exist)
+    const cartData = userData.cartData || {};
+    return res.status(200).json(cartData);
+
+  } catch (error) {
+    console.error("Get Cart Error:", error);
+    
+    // Handle invalid ObjectId format
+    if (error instanceof TypeError) {
+      return res.status(400).json({ message: "Invalid user ID format" });
+    }
+    
+    return res.status(500).json({ message: "Failed to fetch cart data" });
+  }
+});
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
