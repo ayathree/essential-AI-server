@@ -53,6 +53,7 @@ async function run() {
     // database collection
     const userCollection = client.db('essential').collection('users')
     const productCollection = client.db('essential').collection('products');
+    const orderCollection = client.db('essential').collection('orders')
 
      // jwt token
        const generateToken = (userId) => {
@@ -535,6 +536,91 @@ app.post('/cart', isAuth, async (req, res) => {
     }
     
     return res.status(500).json({ message: "Failed to fetch cart data" });
+  }
+});
+
+// place order
+app.post('/placeOrder', isAuth, async (req, res) => {
+  try {
+    const { items, amount, address } = req.body;
+    const userId = req.userId; // From isAuth middleware
+
+    // 1. Validate required fields
+    if (!items || !amount || !address) {
+      return res.status(400).json({ message: "Missing required fields: items, amount, or address" });
+    }
+
+    // 2. Create order document
+    const orderData = {
+      items,
+      amount,
+      userId: new ObjectId(userId), // Ensure proper ObjectId
+      address,
+      paymentMethod: 'COD',
+      paymentStatus: false, // More descriptive than just 'payment'
+      status: 'pending', // Added order status
+      createdAt: new Date(), // Better than Date.now() for MongoDB
+      updatedAt: new Date()
+    };
+
+    // 3. Insert order
+    const result = await orderCollection.insertOne(orderData);
+
+    // 4. Clear user's cart
+    await userCollection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { cartData: {} } }
+    );
+
+    return res.status(201).json({
+      message: 'Order placed successfully',
+      orderId: result.insertedId // Return the new order ID
+    });
+
+  } catch (error) {
+    console.error("Order Placement Error:", error);
+    
+    // Handle specific errors
+    if (error instanceof TypeError) {
+      return res.status(400).json({ message: "Invalid data format" });
+    }
+    
+    return res.status(500).json({ message: "Failed to place order" });
+  }
+});
+
+// user order
+app.get('/userOrders', isAuth, async (req, res) => {
+  try {
+    const userId = req.userId; 
+
+    // 1. Find ALL orders for this user (not just one)
+    const orders = await orderCollection.find({ 
+      userId: new ObjectId(userId) 
+    }).toArray();
+
+    // 2. Handle case where no orders exist
+    if (!orders || orders.length === 0) {
+      return res.status(200).json({ 
+        message: "No orders found",
+        orders: [] 
+      });
+    }
+
+    // 3. Return orders in reverse chronological order (newest first)
+    orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return res.status(200).json(orders);
+
+  } catch (error) {
+    console.error("User Orders Error:", error);
+    
+    // Handle invalid ObjectId format
+    if (error instanceof TypeError) {
+      return res.status(400).json({ message: "Invalid user ID format" });
+    }
+    
+    return res.status(500).json({ message: "Failed to fetch user orders" });
   }
 });
     // Connect the client to the server	(optional starting in v4.7)
