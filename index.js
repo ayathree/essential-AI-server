@@ -623,6 +623,72 @@ app.get('/userOrders', isAuth, async (req, res) => {
     return res.status(500).json({ message: "Failed to fetch user orders" });
   }
 });
+
+// for admin (order)
+app.get('/adminOrders',isAuthAdmin, async (req, res) => {
+  try {
+    // Convert cursor to array and sort by date (newest first)
+    const orders = await orderCollection.find({})
+      .sort({ createdAt: -1 }) // Sort by newest first
+      .toArray();
+    
+    res.status(200).json(orders);
+
+  } catch (error) {
+    console.error("Admin Orders Error:", error);
+    return res.status(500).json({ message: "Failed to fetch admin orders" });
+  }
+});
+
+// update admin (order)
+app.put('/adminOrders/:orderId', isAuthAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params; // Get from URL params
+    const { status } = req.body;
+
+    // Validate input
+    if (!orderId || !status) {
+      return res.status(400).json({ message: "Order ID and status are required" });
+    }
+
+    // Validate status values (optional but recommended)
+    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    // Update the order
+    const result = await orderCollection.updateOne(
+      { _id: new ObjectId(orderId) }, // Correct filter
+      { 
+        $set: { 
+          status,
+          updatedAt: new Date() // Track when status was updated
+        } 
+      }
+    );
+
+    // Check if order was found and updated
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    return res.status(200).json({ 
+      message: 'Status updated successfully',
+      updated: true
+    });
+
+  } catch (error) {
+    console.error("Update Order Error:", error);
+    
+    // Handle invalid ObjectId format
+    if (error instanceof TypeError) {
+      return res.status(400).json({ message: "Invalid order ID format" });
+    }
+    
+    return res.status(500).json({ message: "Failed to update order status" });
+  }
+});
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
