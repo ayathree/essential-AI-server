@@ -88,7 +88,14 @@ const isAuth = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Authentication error:", error);
-    return res.status(500).json({ message: "Authentication failed" });
+    // Clear invalid token
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, 
+    });
+    return res.status(401).json({ message: "Authentication failed" });
   }
 };
 
@@ -101,15 +108,29 @@ const isAuthAdmin = async (req, res, next) => {
     }
     
     const verifyToken = jwt.verify(token, process.env.JWT_SECRET);
-    if (!verifyToken) {
-      return res.status(401).json({ message: "Invalid token" });
+    if (!verifyToken || !verifyToken.email || verifyToken.email !== process.env.ADMIN_EMAIL) {
+      // Clear invalid admin token
+      res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000, 
+      });
+      return res.status(401).json({ message: "Admin authentication required" });
     }
     
-    req.adminEmail = process.env.ADMIN_EMAIL;
+    req.adminEmail = verifyToken.email;
     next();
   } catch (error) {
     console.error("Admin Authentication error:", error);
-    return res.status(500).json({ message: "Admin Authentication failed" });
+    // Clear invalid token on error
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, 
+    });
+    return res.status(401).json({ message: "Admin authentication failed" });
   }
 };
 
@@ -145,18 +166,19 @@ app.get('/getCurrentUser', isAuth, async (req, res) => {
 });
 
 // Admin route handle
+
 app.get('/getAdmin', isAuthAdmin, async (req, res) => {
   try {
-    // Correct MongoDB query - findById and proper projection
-    const adminEmail = req.adminEmail
+    // Use the email from the verified token, not from env
+    const adminEmail = req.adminEmail;
     
-    if (!adminEmail) {
+    if (!adminEmail || adminEmail !== process.env.ADMIN_EMAIL) {
       return res.status(404).json({ message: "Admin not found" });
     }
     
     return res.status(200).json({
-      email:adminEmail,
-      role:"admin"
+      email: adminEmail,
+      role: "admin"
     });
     
   } catch (error) {
@@ -213,7 +235,8 @@ app.post('/registration', async (req, res) => {
     res.cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
+        sameSite:process.env.NODE_ENV === 'production'?'none':'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000, 
       });
     
     // Return response (don't send back password hash)
@@ -265,7 +288,8 @@ app.post('/login', async (req, res) => {
     res.cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
+        sameSite:process.env.NODE_ENV === 'production'?'none':'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000, 
       });
 
     // Return minimal user info (without sensitive data)
@@ -300,7 +324,8 @@ app.post('/adminSignin', async (req, res) => {
     res.cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
+        sameSite:process.env.NODE_ENV === 'production'?'none':'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000, 
       });
 
     // Return minimal user info (without sensitive data)
@@ -331,7 +356,7 @@ app.get('/logout', async(req,res)=>{
   res.clearCookie('token', {
    httpOnly: true,
    secure: process.env.NODE_ENV === 'production',
-   sameSite: process.env.NODE_ENV === 'production'?'none':'strict',
+   sameSite: process.env.NODE_ENV === 'production'?'none':'lax',
    maxAge:0,
  })
  return res.status(200).json({ 
